@@ -4,15 +4,19 @@ import sys
 import subprocess
 import threading
 import re
+import tempfile
 from yt_dlp import YoutubeDL
 
+# Ruta de salida
 escritorio = os.path.join(os.path.expanduser("~"), "Desktop")
 carpeta_salida = os.path.join(escritorio, "YTdownloader")
 os.makedirs(carpeta_salida, exist_ok=True)
 ruta_salida = os.path.join(carpeta_salida, '%(title)s [%(id)s].%(ext)s')
 
+# Expresión regular para validar URLs de YouTube
 youtube_regex = re.compile(r'(https?://)?(www\.)?(youtube\.com|youtu\.?be)/.+')
 
+# Traducciones
 traducciones = {
     "es": {
         "titulo": "🎬 YTDownloader por Gabriel",
@@ -48,6 +52,17 @@ traducciones = {
     }
 }
 
+# Escribir cookies en un archivo temporal si están disponibles como variable de entorno
+def escribir_cookies_temporal():
+    cookies_env = os.getenv("YT_COOKIES")
+    if cookies_env:
+        temp = tempfile.NamedTemporaryFile(delete=False, mode="w", suffix=".txt")
+        temp.write(cookies_env)
+        temp.close()
+        return temp.name
+    return None
+
+# Función principal
 def main(page: ft.Page):
     idioma_actual = "es"
     page.title = traducciones[idioma_actual]["titulo"]
@@ -73,7 +88,6 @@ def main(page: ft.Page):
     estado = ft.Text(text_align="center")
     historial = ft.ListView(height=150, spacing=10, auto_scroll=True)
     historial_titulo = ft.Text(traducciones[idioma_actual]["historial_label"], weight="bold")
-
     idioma_selector = ft.Dropdown(
         width=150,
         label=traducciones[idioma_actual]["idioma_label"],
@@ -118,7 +132,6 @@ def main(page: ft.Page):
                 total = d.get('total_bytes') or d.get('total_bytes_estimate') or 1
                 speed = d.get('speed') or 0
                 porcentaje = (downloaded / total) * 100
-
                 try:
                     progreso_bar.value = porcentaje / 100
                     estado.value = traducciones[idioma_actual]["descargando"].format(
@@ -130,7 +143,6 @@ def main(page: ft.Page):
                 except Exception as err:
                     print(f"[Hook error] {err}")
                 page.update()
-
             elif d['status'] == 'finished':
                 progreso_bar.value = 1
                 estado.value = traducciones[idioma_actual]["descarga_completada"]
@@ -155,10 +167,13 @@ def main(page: ft.Page):
         page.update()
 
         def proceso():
+            cookies_path = escribir_cookies_temporal()
             opciones = {
                 'outtmpl': ruta_salida,
                 'progress_hooks': [hook_factory()]
             }
+            if cookies_path:
+                opciones['cookiefile'] = cookies_path
 
             if seleccion == "Solo audio MP3":
                 opciones.update({
@@ -240,6 +255,5 @@ def main(page: ft.Page):
             padding=20
         )
     )
-
 
 ft.app(target=main, view=ft.WEB_BROWSER, port=8080)
